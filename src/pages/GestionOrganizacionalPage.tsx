@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { fetchVentas } from '../api'
-import type { Venta } from '../types'
+import { actualizarFormulaKpi, fetchKpis, fetchVentas, registrarVenta } from '../api'
+import type { Kpi, Venta } from '../types'
 
 type Sucursal = {
   nombre: string
@@ -9,15 +9,28 @@ type Sucursal = {
 
 function GestionOrganizacionalPage() {
   const [ventas, setVentas] = useState<Venta[]>([])
+  const [kpis, setKpis] = useState<Kpi[]>([])
   const [sucursales, setSucursales] = useState<Sucursal[]>([])
   const [mensaje, setMensaje] = useState('')
+  const [mensajeKpi, setMensajeKpi] = useState('')
+  const [mensajeVenta, setMensajeVenta] = useState('')
+
+  const [nuevaVenta, setNuevaVenta] = useState({
+    montoTotal: 0,
+    sistemaOrigen: 'POS',
+    sucursal: '',
+  })
+
+  const [kpiSeleccionadoId, setKpiSeleccionadoId] = useState<number | null>(null)
+  const [nuevaFormula, setNuevaFormula] = useState('')
 
   useEffect(() => {
     async function cargarSucursales() {
       setMensaje('')
       try {
-        const listaVentas = await fetchVentas()
+        const [listaVentas, listaKpis] = await Promise.all([fetchVentas(), fetchKpis()])
         setVentas(listaVentas)
+        setKpis(listaKpis)
       } catch {
         setMensaje('No se pudo obtener información desde ms-datos.')
       }
@@ -75,6 +88,50 @@ function GestionOrganizacionalPage() {
     setMensaje('Cambios validados. (Demo académica sin endpoint PUT de sucursal)')
   }
 
+  async function crearVenta() {
+    setMensajeVenta('')
+
+    if (!nuevaVenta.sucursal.trim() || nuevaVenta.montoTotal <= 0) {
+      setMensajeVenta('Debe indicar sucursal y un monto mayor a cero.')
+      return
+    }
+
+    try {
+      await registrarVenta({
+        fechaVenta: new Date().toISOString(),
+        montoTotal: nuevaVenta.montoTotal,
+        sistemaOrigen: nuevaVenta.sistemaOrigen.trim() || 'POS',
+        sucursal: nuevaVenta.sucursal.trim(),
+      })
+
+      const listaActualizada = await fetchVentas()
+      setVentas(listaActualizada)
+      setNuevaVenta({ montoTotal: 0, sistemaOrigen: 'POS', sucursal: '' })
+      setMensajeVenta('Venta registrada correctamente en ms-datos.')
+    } catch {
+      setMensajeVenta('No fue posible registrar la venta en ms-datos.')
+    }
+  }
+
+  async function guardarFormulaKpi() {
+    setMensajeKpi('')
+
+    if (!kpiSeleccionadoId || !nuevaFormula.trim()) {
+      setMensajeKpi('Debe seleccionar un KPI e ingresar una fórmula.')
+      return
+    }
+
+    try {
+      await actualizarFormulaKpi(kpiSeleccionadoId, nuevaFormula.trim())
+      const lista = await fetchKpis()
+      setKpis(lista)
+      setNuevaFormula('')
+      setMensajeKpi('Fórmula de KPI actualizada correctamente.')
+    } catch {
+      setMensajeKpi('No fue posible actualizar la fórmula en ms-kpis.')
+    }
+  }
+
   return (
     <section className="pagina-contenido">
       <div className="encabezado-pagina">
@@ -111,6 +168,88 @@ function GestionOrganizacionalPage() {
           Guardar cambios
         </button>
         {mensaje && <p>{mensaje}</p>}
+      </section>
+
+      <section className="tarjeta-panel">
+        <h3>Registrar venta (POST ms-datos)</h3>
+        <div className="formulario-simple">
+          <label>
+            Sucursal
+            <input
+              type="text"
+              value={nuevaVenta.sucursal}
+              onChange={(evento) =>
+                setNuevaVenta((actual) => ({ ...actual, sucursal: evento.target.value }))
+              }
+            />
+          </label>
+
+          <label>
+            Sistema origen
+            <input
+              type="text"
+              value={nuevaVenta.sistemaOrigen}
+              onChange={(evento) =>
+                setNuevaVenta((actual) => ({ ...actual, sistemaOrigen: evento.target.value }))
+              }
+            />
+          </label>
+
+          <label>
+            Monto total
+            <input
+              type="number"
+              min={1}
+              value={nuevaVenta.montoTotal}
+              onChange={(evento) =>
+                setNuevaVenta((actual) => ({
+                  ...actual,
+                  montoTotal: Number(evento.target.value),
+                }))
+              }
+            />
+          </label>
+
+          <button type="button" onClick={crearVenta}>
+            Registrar venta
+          </button>
+        </div>
+        {mensajeVenta && <p>{mensajeVenta}</p>}
+      </section>
+
+      <section className="tarjeta-panel">
+        <h3>Actualizar KPI (PUT ms-kpis)</h3>
+        <div className="formulario-simple">
+          <label>
+            KPI
+            <select
+              value={kpiSeleccionadoId ?? ''}
+              onChange={(evento) => setKpiSeleccionadoId(Number(evento.target.value))}
+            >
+              <option value="">Seleccione un KPI</option>
+              {kpis.map((kpi) => (
+                <option key={kpi.id} value={kpi.id}>
+                  {kpi.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            Nueva fórmula
+            <input
+              type="text"
+              value={nuevaFormula}
+              onChange={(evento) => setNuevaFormula(evento.target.value)}
+            />
+          </label>
+
+          <button type="button" onClick={guardarFormulaKpi}>
+            Guardar fórmula
+          </button>
+        </div>
+
+        {mensajeKpi && <p>{mensajeKpi}</p>}
       </section>
     </section>
   )

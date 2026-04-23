@@ -32,3 +32,28 @@ export type DashboardAlert = {
   message: string
   level: AlertLevel
 }
+
+export type LoginResponse = {
+  token: string
+  usuario: string
+  rol: string
+}
+
+export type VentaPorSucursal = {
+  sucursal: string
+  total: number
+}
+
+export type ResumenDashboard = {
+  totalVentas: number
+  cantidadVentas: number
+  cantidadSucursales: number
+}
+
+export type DashboardResponse = {
+  resumen: ResumenDashboard
+  ventas: Venta[]
+  ventasPorSucursal: VentaPorSucursal[]
+  kpis: Kpi[]
+  alertas: string[]
+}

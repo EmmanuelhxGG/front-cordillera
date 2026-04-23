@@ -1,12 +1,10 @@
-import { useMemo, useState } from 'react'
-import { createPlantillaReporte, eliminarPlantillaReporte } from '../api'
-
-type Plantilla = {
-  id: number
-  titulo: string
-  configuracionVisual: string
-  estado: string
-}
+import { useEffect, useMemo, useState } from 'react'
+import {
+  createPlantillaReporte,
+  eliminarPlantillaReporte,
+  fetchPlantillasReporte,
+  type PlantillaReporte,
+} from '../api'
 
 const TAMANO_PAGINA = 5
 
@@ -22,9 +20,22 @@ function descargarComoTexto(nombreArchivo: string, contenido: string) {
 function ReportesPage() {
   const [titulo, setTitulo] = useState('')
   const [configuracionVisual, setConfiguracionVisual] = useState('')
-  const [plantillas, setPlantillas] = useState<Plantilla[]>([])
+  const [plantillas, setPlantillas] = useState<PlantillaReporte[]>([])
   const [paginaActual, setPaginaActual] = useState(1)
   const [mensaje, setMensaje] = useState('')
+
+  useEffect(() => {
+    async function cargarPlantillas() {
+      try {
+        const lista = await fetchPlantillasReporte()
+        setPlantillas(lista)
+      } catch {
+        setMensaje('No se pudo cargar el listado desde ms-reportes.')
+      }
+    }
+
+    cargarPlantillas()
+  }, [])
 
   const totalPaginas = Math.max(1, Math.ceil(plantillas.length / TAMANO_PAGINA))
 
@@ -41,7 +52,7 @@ function ReportesPage() {
       return
     }
 
-    const nuevaPlantilla: Plantilla = {
+    const plantillaLocal: PlantillaReporte = {
       id: Date.now(),
       titulo: titulo.trim(),
       configuracionVisual: configuracionVisual.trim(),
@@ -49,19 +60,19 @@ function ReportesPage() {
     }
 
     try {
-      await createPlantillaReporte({
+      const creada = await createPlantillaReporte({
         titulo: titulo.trim(),
         configuracionVisual: configuracionVisual.trim(),
         estado: 'Activo',
       })
 
-      setPlantillas((actual) => [nuevaPlantilla, ...actual])
+      setPlantillas((actual) => [creada, ...actual])
       setTitulo('')
       setConfiguracionVisual('')
       setPaginaActual(1)
       setMensaje('Plantilla creada correctamente.')
     } catch {
-      setPlantillas((actual) => [nuevaPlantilla, ...actual])
+      setPlantillas((actual) => [plantillaLocal, ...actual])
       setTitulo('')
       setConfiguracionVisual('')
       setPaginaActual(1)

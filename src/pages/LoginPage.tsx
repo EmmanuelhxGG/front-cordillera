@@ -1,25 +1,10 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { iniciarSesion } from '../api'
+import type { LoginResponse } from '../types'
 
 type LoginPageProps = {
   onLoginExitoso: (token: string, rol: string, usuario: string) => void
-}
-
-function obtenerRolDesdeToken(token: string, usuario: string): string {
-  const partes = token.split('.')
-  if (partes.length === 3) {
-    try {
-      const payloadTexto = atob(partes[1])
-      const payload = JSON.parse(payloadTexto) as { role?: string; rol?: string }
-      const rol = payload.role || payload.rol
-      if (rol) return rol.toUpperCase()
-    } catch {
-      // Si no se puede decodificar, se usa regla simple por usuario
-    }
-  }
-
-  return usuario.toLowerCase().includes('admin') ? 'ADMIN' : 'EJECUTIVO'
 }
 
 function LoginPage({ onLoginExitoso }: LoginPageProps) {
@@ -49,13 +34,12 @@ function LoginPage({ onLoginExitoso }: LoginPageProps) {
     setCargando(true)
 
     try {
-      const token = await iniciarSesion({
+      const respuesta: LoginResponse = await iniciarSesion({
         username: usuario.trim(),
         password: contrasena,
       })
 
-      const rol = obtenerRolDesdeToken(token, usuario)
-      onLoginExitoso(token, rol, usuario)
+      onLoginExitoso(respuesta.token, respuesta.rol, respuesta.usuario)
     } catch (error) {
       const mensajeGenerico =
         'No se pudo iniciar sesión. Verifique credenciales o conexión con ms-auth.'

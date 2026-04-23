@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { fetchKpis, fetchVentas } from '../api'
-import type { Kpi, Venta } from '../types'
+import { fetchDashboard } from '../api'
+import type { DashboardResponse, Kpi, Venta } from '../types'
 import {
   CartesianGrid,
   Legend,
@@ -64,12 +64,28 @@ const KPIS_DEMO: Kpi[] = [
   },
 ]
 
+const DASHBOARD_DEMO: DashboardResponse = {
+  resumen: {
+    totalVentas: 3710000,
+    cantidadVentas: 3,
+    cantidadSucursales: 3,
+  },
+  ventas: VENTAS_DEMO,
+  ventasPorSucursal: VENTAS_DEMO.map((venta) => ({
+    sucursal: venta.sucursal,
+    total: venta.montoTotal,
+  })),
+  kpis: KPIS_DEMO,
+  alertas: ['Modo demo activo.'],
+}
+
 function DashboardPrincipalPage({
   ciudadSeleccionada,
   onCambiarCiudad,
 }: DashboardPrincipalPageProps) {
-  const [ventas, setVentas] = useState<Venta[]>([])
-  const [kpis, setKpis] = useState<Kpi[]>([])
+  const [ventas, setVentas] = useState<Venta[]>(DASHBOARD_DEMO.ventas)
+  const [kpis, setKpis] = useState<Kpi[]>(DASHBOARD_DEMO.kpis)
+  const [alertas, setAlertas] = useState<string[]>(DASHBOARD_DEMO.alertas)
   const [cargando, setCargando] = useState(false)
   const [mensajeError, setMensajeError] = useState('')
 
@@ -79,16 +95,14 @@ function DashboardPrincipalPage({
       setMensajeError('')
 
       try {
-        const [listaVentas, listaKpis] = await Promise.all([
-          fetchVentas(),
-          fetchKpis(),
-        ])
-
-        setVentas(listaVentas)
-        setKpis(listaKpis)
+        const respuesta = await fetchDashboard()
+        setVentas(respuesta.ventas)
+        setKpis(respuesta.kpis)
+        setAlertas(respuesta.alertas)
       } catch {
-        setVentas(VENTAS_DEMO)
-        setKpis(KPIS_DEMO)
+        setVentas(DASHBOARD_DEMO.ventas)
+        setKpis(DASHBOARD_DEMO.kpis)
+        setAlertas(DASHBOARD_DEMO.alertas)
         setMensajeError('No se pudo conectar con backend. Mostrando datos demo.')
       } finally {
         setCargando(false)
@@ -96,7 +110,7 @@ function DashboardPrincipalPage({
     }
 
     cargarDatos()
-  }, [ciudadSeleccionada])
+  }, [])
 
   const ciudadesDisponibles = useMemo(() => {
     const ciudades = new Set(ventas.map((item) => item.sucursal))
@@ -158,6 +172,9 @@ function DashboardPrincipalPage({
 
       {cargando && <p>Cargando información...</p>}
       {mensajeError && <p className="mensaje-error">{mensajeError}</p>}
+      {!mensajeError && alertas.length > 0 && (
+        <p className="mensaje-demo">{alertas[0]}</p>
+      )}
 
       <div className="rejilla-kpi">
         <article className="tarjeta-kpi">
