@@ -25,9 +25,7 @@ function App() {
   const [token, setToken] = useState(sesionInicial.token)
   const [rol, setRol] = useState(sesionInicial.rol)
   const [usuario, setUsuario] = useState(sesionInicial.usuario)
-  const [paginaActual, setPaginaActual] =
-    useState<PaginaSistema>('dashboard')
-  const [ciudadSeleccionada, setCiudadSeleccionada] = useState('Todas')
+  const [paginaActual, setPaginaActual] = useState<PaginaSistema>('dashboard')
 
   function manejarLoginExitoso(
     nuevoToken: string,
@@ -82,12 +80,7 @@ function App() {
     },
   ]
 
-  let contenidoPagina = (
-    <DashboardPrincipalPage
-      ciudadSeleccionada={ciudadSeleccionada}
-      onCambiarCiudad={setCiudadSeleccionada}
-    />
-  )
+  let contenidoPagina = <DashboardPrincipalPage />
 
   if (paginaActual === 'reportes') {
     contenidoPagina = <ReportesPage />
