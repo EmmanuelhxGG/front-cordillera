@@ -38,6 +38,23 @@ const COLORES_GRAFICO = [
 
 const TARJETAS_POR_PAGINA = 4
 
+const PRODUCTOS_STOCK = [
+  { nombre: 'Celulares', categoria: 'Electrónica' },
+  { nombre: 'Mouse', categoria: 'Electrónica' },
+  { nombre: 'Computadores', categoria: 'Electrónica' },
+  { nombre: 'Hervidores', categoria: 'Hogar' },
+  { nombre: 'Ollas', categoria: 'Hogar' },
+  { nombre: 'Licuadoras', categoria: 'Hogar' },
+]
+
+type RegistroProductoSucursal = {
+  periodo: string
+  categoria: 'Electrónica' | 'Hogar'
+  producto: string
+  stockRestante: number
+  vendidos: number
+}
+
 const SUCURSALES_DEMO = [
   { sucursal: 'Santiago', base: 20000000 },
   { sucursal: 'Concepción', base: 12000000 },
@@ -143,7 +160,27 @@ const DASHBOARD_DEMO: DashboardResponse = {
   alertas: ['Modo demo activo.'],
 }
 
-function DashboardPrincipalPage() {
+function hashTexto(texto: string) {
+  return Array.from(texto).reduce((acc, char) => acc + char.charCodeAt(0), 0)
+}
+
+function normalizarTexto(texto: string) {
+  return texto
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+}
+
+type DashboardPrincipalPageProps = {
+  rol?: string
+  sucursalAsignada?: string | null
+}
+
+function DashboardPrincipalPage({
+  rol,
+  sucursalAsignada,
+}: DashboardPrincipalPageProps) {
   const [ventas, setVentas] = useState<Venta[]>(DASHBOARD_DEMO.ventas)
   const [kpis, setKpis] = useState<Kpi[]>(DASHBOARD_DEMO.kpis)
   const [alertas, setAlertas] = useState<string[]>(DASHBOARD_DEMO.alertas)
@@ -151,6 +188,10 @@ function DashboardPrincipalPage() {
   const [mensajeError, setMensajeError] = useState('')
   const [paginaSucursales, setPaginaSucursales] = useState(0)
   const [sucursalActiva, setSucursalActiva] = useState<string | null>(null)
+  const [periodoAnalisis, setPeriodoAnalisis] = useState('GENERAL')
+
+  const esEmpleadoTienda = (rol ?? '').toUpperCase() === 'EMPLEADO_TIENDA'
+  const sucursalBloqueada = esEmpleadoTienda && Boolean(sucursalAsignada)
 
   useEffect(() => {
     async function cargarDatos() {
@@ -176,17 +217,19 @@ function DashboardPrincipalPage() {
   }, [])
 
   const ventasPorSucursal = useMemo(() => {
-    const porSucursal = new Map<string, number>()
+    const porSucursal = new Map<string, { sucursal: string; total: number }>()
 
     for (const venta of ventas) {
-      porSucursal.set(
-        venta.sucursal,
-        (porSucursal.get(venta.sucursal) ?? 0) + venta.montoTotal,
-      )
+      const llave = normalizarTexto(venta.sucursal)
+      const registroActual = porSucursal.get(llave)
+
+      porSucursal.set(llave, {
+        sucursal: registroActual?.sucursal ?? venta.sucursal,
+        total: (registroActual?.total ?? 0) + venta.montoTotal,
+      })
     }
 
-    return Array.from(porSucursal.entries())
-      .map(([sucursal, total]) => ({ sucursal, total }))
+    return Array.from(porSucursal.values())
       .sort((a, b) => b.total - a.total)
   }, [ventas])
 
@@ -214,9 +257,11 @@ function DashboardPrincipalPage() {
   const serieSucursalActiva = useMemo(() => {
     if (!sucursalActiva) return []
 
+    const sucursalObjetivo = normalizarTexto(sucursalActiva)
+
     const porMes = new Map<string, number>()
     for (const venta of ventas) {
-      if (venta.sucursal !== sucursalActiva) continue
+      if (normalizarTexto(venta.sucursal) !== sucursalObjetivo) continue
 
       const fecha = new Date(venta.fechaVenta)
       if (Number.isNaN(fecha.getTime())) continue
@@ -263,23 +308,29 @@ function DashboardPrincipalPage() {
   }, [ventasPorSucursal, ventasTotales])
 
   const tarjetasSucursales = useMemo(() => {
-    const mapaSeries = new Map<string, Map<string, number>>()
+    const mapaSeries = new Map<string, { sucursal: string; serie: Map<string, number>; total: number }>()
 
     for (const venta of ventas) {
-      const sucursal = venta.sucursal
+      const llaveSucursal = normalizarTexto(venta.sucursal)
       const fecha = new Date(venta.fechaVenta)
       if (Number.isNaN(fecha.getTime())) continue
 
       const periodo = `${fecha.getFullYear()}-${`${fecha.getMonth() + 1}`.padStart(2, '0')}`
-      const serie = mapaSeries.get(sucursal) ?? new Map<string, number>()
+      const registroActual = mapaSeries.get(llaveSucursal)
+      const serie = registroActual?.serie ?? new Map<string, number>()
       serie.set(periodo, (serie.get(periodo) ?? 0) + venta.montoTotal)
-      mapaSeries.set(sucursal, serie)
+
+      mapaSeries.set(llaveSucursal, {
+        sucursal: registroActual?.sucursal ?? venta.sucursal,
+        serie,
+        total: (registroActual?.total ?? 0) + venta.montoTotal,
+      })
     }
 
     return ventasPorSucursal.map((item) => ({
       sucursal: item.sucursal,
       total: item.total,
-      serie: Array.from(mapaSeries.get(item.sucursal)?.entries() ?? [])
+      serie: Array.from(mapaSeries.get(normalizarTexto(item.sucursal))?.serie.entries() ?? [])
         .map(([periodo, total]) => ({ periodo, total }))
         .sort((a, b) => (a.periodo > b.periodo ? 1 : -1)),
     }))
@@ -314,6 +365,110 @@ function DashboardPrincipalPage() {
     )
   }
 
+  useEffect(() => {
+    if (sucursalBloqueada && sucursalAsignada) {
+      setSucursalActiva(sucursalAsignada)
+    }
+  }, [sucursalBloqueada, sucursalAsignada])
+
+  useEffect(() => {
+    setPeriodoAnalisis('GENERAL')
+  }, [sucursalActiva])
+
+  const detalleProductosSucursal = useMemo<RegistroProductoSucursal[]>(() => {
+    if (!sucursalActiva) return []
+
+    const hashSucursal = hashTexto(sucursalActiva)
+    const periodos = serieSucursalActiva.map((item) => item.periodo)
+
+    return periodos.flatMap((periodo, idxPeriodo) =>
+      PRODUCTOS_STOCK.map((item, idxProducto) => {
+        const base = hashSucursal + (idxPeriodo + 1) * 41 + (idxProducto + 3) * 17
+        const vendidos = 22 + (base % 44)
+        const stockRestante = 35 + (base % 120)
+
+        return {
+          periodo,
+          categoria: item.categoria as 'Electrónica' | 'Hogar',
+          producto: item.nombre,
+          stockRestante,
+          vendidos,
+        }
+      }),
+    )
+  }, [serieSucursalActiva, sucursalActiva])
+
+  const periodosAnalisisDisponibles = useMemo(
+    () => serieSucursalActiva.map((item) => item.periodo),
+    [serieSucursalActiva],
+  )
+
+  const detalleFiltrado = useMemo(
+    () =>
+      periodoAnalisis === 'GENERAL'
+        ? detalleProductosSucursal
+        : detalleProductosSucursal.filter((item) => item.periodo === periodoAnalisis),
+    [detalleProductosSucursal, periodoAnalisis],
+  )
+
+  const ventasAnalisis = useMemo(() => {
+    if (!sucursalActiva) return 0
+
+    if (periodoAnalisis === 'GENERAL') {
+      return resumenSucursalActiva?.total ?? 0
+    }
+
+    const datoMes = serieSucursalActiva.find((item) => item.periodo === periodoAnalisis)
+    return datoMes?.total ?? 0
+  }, [periodoAnalisis, resumenSucursalActiva, serieSucursalActiva, sucursalActiva])
+
+  const stockVendidoAnalisis = useMemo(
+    () => detalleFiltrado.reduce((acum, item) => acum + item.vendidos, 0),
+    [detalleFiltrado],
+  )
+
+  const productoMasVendido = useMemo(() => {
+    if (!detalleFiltrado.length) return null
+
+    return detalleFiltrado.reduce((maximo, actual) =>
+      actual.vendidos > maximo.vendidos ? actual : maximo,
+    )
+  }, [detalleFiltrado])
+
+  const stockPorCategoria = useMemo(() => {
+    const periodoReferencia =
+      periodoAnalisis === 'GENERAL'
+        ? periodosAnalisisDisponibles[periodosAnalisisDisponibles.length - 1]
+        : periodoAnalisis
+
+    if (!periodoReferencia) {
+      return { electronica: 0, hogar: 0 }
+    }
+
+    const detallePeriodo = detalleProductosSucursal.filter(
+      (item) => item.periodo === periodoReferencia,
+    )
+
+    return {
+      electronica: detallePeriodo
+        .filter((item) => item.categoria === 'Electrónica')
+        .reduce((acum, item) => acum + item.stockRestante, 0),
+      hogar: detallePeriodo
+        .filter((item) => item.categoria === 'Hogar')
+        .reduce((acum, item) => acum + item.stockRestante, 0),
+    }
+  }, [detalleProductosSucursal, periodoAnalisis, periodosAnalisisDisponibles])
+
+  const detalleElectronica = useMemo(
+    () => detalleFiltrado.filter((item) => item.categoria === 'Electrónica'),
+    [detalleFiltrado],
+  )
+
+  const detalleHogar = useMemo(
+    () => detalleFiltrado.filter((item) => item.categoria === 'Hogar'),
+    [detalleFiltrado],
+  )
+
   return (
     <section className="pagina-contenido">
       <div className="encabezado-pagina">
@@ -325,7 +480,7 @@ function DashboardPrincipalPage() {
       {mensajeError && <p className="mensaje-error">{mensajeError}</p>}
       {!mensajeError && alertas.length > 0 && <p className="mensaje-demo">{alertas[0]}</p>}
 
-      <section className="tarjeta-panel">
+      {!sucursalBloqueada && <section className="tarjeta-panel">
         <div className="encabezado-mini-sucursales">
           <h3>Ventas por sucursal</h3>
           <div className="controles-mini-sucursales">
@@ -387,26 +542,40 @@ function DashboardPrincipalPage() {
             </article>
           )})}
         </div>
-      </section>
+      </section>}
 
       {sucursalActiva ? (
         <>
           <section className="tarjeta-panel">
             <div className="encabezado-mini-sucursales">
               <h3>Rendimiento de {sucursalActiva} (últimos 6 meses)</h3>
-              <button
-                type="button"
-                className="boton-volver-general"
-                onClick={() => setSucursalActiva(null)}
-              >
-                Volver al general
-              </button>
+              {!sucursalBloqueada && (
+                <button
+                  type="button"
+                  className="boton-volver-general"
+                  onClick={() => setSucursalActiva(null)}
+                >
+                  Volver al general
+                </button>
+              )}
             </div>
+
+            {esEmpleadoTienda && (
+              <p className="mensaje-demo">
+                Puedes revisar el rendimiento general de {sucursalActiva} o seleccionar un mes puntual.
+              </p>
+            )}
 
             <div className="contenedor-grafico">
               <ResponsiveContainer width="100%" height={320}>
                 <AreaChart
                   data={serieSucursalActiva}
+                  onClick={(evento) => {
+                    const etiqueta = (evento as { activeLabel?: string })?.activeLabel
+                    if (etiqueta) {
+                      setPeriodoAnalisis(etiqueta)
+                    }
+                  }}
                   margin={{ top: 8, right: 18, left: 8, bottom: 0 }}
                 >
                   <defs>
@@ -438,27 +607,85 @@ function DashboardPrincipalPage() {
 
           <section className="tarjeta-panel">
             <h3>Resumen rápido ({sucursalActiva})</h3>
+
+            {esEmpleadoTienda && (
+              <div className="formulario-simple" style={{ marginBottom: 12 }}>
+                <label>
+                  Periodo de análisis
+                  <select
+                    value={periodoAnalisis}
+                    onChange={(evento) => setPeriodoAnalisis(evento.target.value)}
+                  >
+                    <option value="GENERAL">General (6 meses)</option>
+                    {periodosAnalisisDisponibles.map((periodo) => (
+                      <option key={periodo} value={periodo}>
+                        {periodo}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            )}
+
             <div className="rejilla-kpi">
               <article className="tarjeta-kpi">
-                <h3>Ventas 6 meses</h3>
-                <p>{FORMATO_MONEDA.format(resumenSucursalActiva?.total ?? 0)}</p>
+                <h3>{periodoAnalisis === 'GENERAL' ? 'Ventas 6 meses' : 'Ventas del mes'}</h3>
+                <p>{FORMATO_MONEDA.format(ventasAnalisis)}</p>
               </article>
 
               <article className="tarjeta-kpi">
-                <h3>Promedio mensual</h3>
-                <p>{FORMATO_MONEDA.format(resumenSucursalActiva?.promedioMensual ?? 0)}</p>
+                <h3>{esEmpleadoTienda ? 'Stock vendido' : 'Promedio mensual'}</h3>
+                <p>
+                  {esEmpleadoTienda
+                    ? stockVendidoAnalisis
+                    : FORMATO_MONEDA.format(resumenSucursalActiva?.promedioMensual ?? 0)}
+                </p>
               </article>
 
               <article className="tarjeta-kpi">
-                <h3>Mejor mes</h3>
-                <p>{resumenSucursalActiva?.mejorMes?.periodo ?? '-'}</p>
+                <h3>{esEmpleadoTienda ? 'Producto más vendido' : 'Mejor mes'}</h3>
+                <p>
+                  {esEmpleadoTienda
+                    ? productoMasVendido?.producto ?? '-'
+                    : resumenSucursalActiva?.mejorMes?.periodo ?? '-'}
+                </p>
               </article>
 
               <article className="tarjeta-kpi">
-                <h3>Registros de venta</h3>
-                <p>{resumenSucursalActiva?.registros ?? 0}</p>
+                <h3>{esEmpleadoTienda ? 'Stock actual (ref.)' : 'Registros de venta'}</h3>
+                <p>
+                  {esEmpleadoTienda
+                    ? stockPorCategoria.electronica + stockPorCategoria.hogar
+                    : resumenSucursalActiva?.registros ?? 0}
+                </p>
               </article>
             </div>
+
+            {esEmpleadoTienda && (
+              <div className="panel-graficos" style={{ marginTop: 12 }}>
+                <article className="tarjeta-panel">
+                  <h3>Stock de productos (Electrónica)</h3>
+                  <div className="lista-sucursales-resumen">
+                    {detalleElectronica.map((item) => (
+                      <p key={`${item.periodo}-${item.producto}`}>
+                        <strong>{item.producto}:</strong> {item.stockRestante} en stock
+                      </p>
+                    ))}
+                  </div>
+                </article>
+
+                <article className="tarjeta-panel">
+                  <h3>Stock de productos (Hogar)</h3>
+                  <div className="lista-sucursales-resumen">
+                    {detalleHogar.map((item) => (
+                      <p key={`${item.periodo}-${item.producto}`}>
+                        <strong>{item.producto}:</strong> {item.stockRestante} en stock
+                      </p>
+                    ))}
+                  </div>
+                </article>
+              </div>
+            )}
           </section>
         </>
       ) : (

@@ -9,6 +9,7 @@ export type LoginResponse = {
   token: string
   usuario: string
   rol: string
+  sucursal: string | null
 }
 
 export async function iniciarSesion(

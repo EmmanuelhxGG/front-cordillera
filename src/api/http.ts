@@ -11,7 +11,7 @@ export const ventasHttp = axios.create({
 })
 
 export const kpisHttp = axios.create({
-  baseURL: 'http://localhost:8182/api/kpis',
+  baseURL: 'http://localhost:8082/api/kpis',
   timeout: 8000,
 })
 

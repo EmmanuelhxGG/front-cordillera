@@ -17,7 +17,8 @@ function obtenerSesionInicial() {
   const token = sessionStorage.getItem('token') ?? ''
   const rol = sessionStorage.getItem('rol') ?? ''
   const usuario = sessionStorage.getItem('usuario') ?? ''
-  return { token, rol, usuario }
+  const sucursal = sessionStorage.getItem('sucursal')
+  return { token, rol, usuario, sucursal }
 }
 
 function App() {
@@ -25,35 +26,47 @@ function App() {
   const [token, setToken] = useState(sesionInicial.token)
   const [rol, setRol] = useState(sesionInicial.rol)
   const [usuario, setUsuario] = useState(sesionInicial.usuario)
+  const [sucursal, setSucursal] = useState<string | null>(sesionInicial.sucursal)
   const [paginaActual, setPaginaActual] = useState<PaginaSistema>('dashboard')
 
   function manejarLoginExitoso(
     nuevoToken: string,
     nuevoRol: string,
     nuevoUsuario: string,
+    nuevaSucursal: string | null,
   ) {
     setToken(nuevoToken)
     setRol(nuevoRol)
     setUsuario(nuevoUsuario)
+    setSucursal(nuevaSucursal)
     setPaginaActual('dashboard')
 
     sessionStorage.setItem('token', nuevoToken)
     sessionStorage.setItem('rol', nuevoRol)
     sessionStorage.setItem('usuario', nuevoUsuario)
+
+    if (nuevaSucursal) {
+      sessionStorage.setItem('sucursal', nuevaSucursal)
+    } else {
+      sessionStorage.removeItem('sucursal')
+    }
   }
 
   function cerrarSesion() {
     sessionStorage.removeItem('token')
     sessionStorage.removeItem('rol')
     sessionStorage.removeItem('usuario')
+    sessionStorage.removeItem('sucursal')
 
     setToken('')
     setRol('')
     setUsuario('')
+    setSucursal(null)
     setPaginaActual('dashboard')
   }
 
   const esAdmin = rol.toUpperCase() === 'ADMIN'
+  const esEmpleadoTienda = rol.toUpperCase() === 'EMPLEADO_TIENDA'
 
   if (!token) {
     return (
@@ -63,34 +76,38 @@ function App() {
     )
   }
 
-  const opcionesMenu: Array<{ clave: PaginaSistema; texto: string }> = [
-    { clave: 'dashboard', texto: 'Dashboard principal' },
-    { clave: 'reportes', texto: 'Módulo de reportes' },
-    ...(esAdmin
-      ? ([
-          {
-            clave: 'gestion-organizacional',
-            texto: 'Gestión organizacional',
-          },
-        ] as Array<{ clave: PaginaSistema; texto: string }>)
-      : []),
-    {
-      clave: 'configuracion-auditoria',
-      texto: 'Configuración y auditoría',
-    },
-  ]
+  const opcionesMenu: Array<{ clave: PaginaSistema; texto: string }> = esEmpleadoTienda
+    ? [{ clave: 'dashboard', texto: 'Dashboard principal' }]
+    : [
+        { clave: 'dashboard', texto: 'Dashboard principal' },
+        { clave: 'reportes', texto: 'Módulo de reportes' },
+        ...(esAdmin
+          ? ([
+              {
+                clave: 'gestion-organizacional',
+                texto: 'Gestión organizacional',
+              },
+            ] as Array<{ clave: PaginaSistema; texto: string }>)
+          : []),
+        {
+          clave: 'configuracion-auditoria',
+          texto: 'Configuración y auditoría',
+        },
+      ]
 
-  let contenidoPagina = <DashboardPrincipalPage />
+  let contenidoPagina = (
+    <DashboardPrincipalPage rol={rol} sucursalAsignada={sucursal} />
+  )
 
-  if (paginaActual === 'reportes') {
+  if (paginaActual === 'reportes' && !esEmpleadoTienda) {
     contenidoPagina = <ReportesPage />
   }
 
-  if (paginaActual === 'gestion-organizacional' && esAdmin) {
+  if (paginaActual === 'gestion-organizacional' && esAdmin && !esEmpleadoTienda) {
     contenidoPagina = <GestionOrganizacionalPage />
   }
 
-  if (paginaActual === 'configuracion-auditoria') {
+  if (paginaActual === 'configuracion-auditoria' && !esEmpleadoTienda) {
     contenidoPagina = (
       <ConfiguracionAuditoriaPage
         token={token}
@@ -107,6 +124,7 @@ function App() {
         <aside className="menu-lateral">
           <h2>Panel Admin</h2>
           <p>{usuario}</p>
+          {esEmpleadoTienda && sucursal && <p>Sucursal: {sucursal}</p>}
 
           <nav>
             {opcionesMenu.map((opcion) => (
@@ -120,6 +138,10 @@ function App() {
               </button>
             ))}
           </nav>
+
+          <button type="button" onClick={cerrarSesion} className="boton-cerrar-sesion">
+            Cerrar sesión
+          </button>
         </aside>
 
         <section className="contenido-principal">{contenidoPagina}</section>

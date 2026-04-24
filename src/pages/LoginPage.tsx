@@ -4,7 +4,12 @@ import { iniciarSesion } from '../api'
 import type { LoginResponse } from '../types'
 
 type LoginPageProps = {
-  onLoginExitoso: (token: string, rol: string, usuario: string) => void
+  onLoginExitoso: (
+    token: string,
+    rol: string,
+    usuario: string,
+    sucursal: string | null,
+  ) => void
 }
 
 function LoginPage({ onLoginExitoso }: LoginPageProps) {
@@ -19,7 +24,7 @@ function LoginPage({ onLoginExitoso }: LoginPageProps) {
   const [mensajeExito, setMensajeExito] = useState('')
 
   function entrarComoInvitado() {
-    onLoginExitoso('demo-token', 'EJECUTIVO', 'Invitado')
+    onLoginExitoso('demo-token', 'EJECUTIVO', 'Invitado', null)
   }
 
   async function manejarSubmit(evento: FormEvent<HTMLFormElement>) {
@@ -45,7 +50,12 @@ function LoginPage({ onLoginExitoso }: LoginPageProps) {
         password: contrasena,
       })
 
-      onLoginExitoso(respuesta.token, respuesta.rol, respuesta.usuario)
+      onLoginExitoso(
+        respuesta.token,
+        respuesta.rol,
+        respuesta.usuario,
+        respuesta.sucursal,
+      )
     } catch (error) {
       const mensajeGenerico =
         'No se pudo iniciar sesión. Verifique credenciales o conexión con ms-auth.'
