@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { fetchDashboard } from '../api'
-import type { DashboardResponse, Kpi, Venta } from '../types'
+import { obtenerDetalleStock } from '../utils/stockUtils'
+import type { Kpi, Venta } from '../types'
 import {
   Area,
   AreaChart,
@@ -38,131 +39,7 @@ const COLORES_GRAFICO = [
 
 const TARJETAS_POR_PAGINA = 4
 
-const PRODUCTOS_STOCK = [
-  { nombre: 'Celulares', categoria: 'Electrónica' },
-  { nombre: 'Mouse', categoria: 'Electrónica' },
-  { nombre: 'Computadores', categoria: 'Electrónica' },
-  { nombre: 'Hervidores', categoria: 'Hogar' },
-  { nombre: 'Ollas', categoria: 'Hogar' },
-  { nombre: 'Licuadoras', categoria: 'Hogar' },
-]
-
-type RegistroProductoSucursal = {
-  periodo: string
-  categoria: 'Electrónica' | 'Hogar'
-  producto: string
-  stockRestante: number
-  vendidos: number
-}
-
-const SUCURSALES_DEMO = [
-  { sucursal: 'Santiago', base: 20000000 },
-  { sucursal: 'Concepción', base: 12000000 },
-  { sucursal: 'Valparaíso', base: 13800000 },
-  { sucursal: 'Temuco', base: 9800000 },
-  { sucursal: 'Antofagasta', base: 11400000 },
-  { sucursal: 'La Serena', base: 9200000 },
-  { sucursal: 'Rancagua', base: 8700000 },
-  { sucursal: 'Talca', base: 8400000 },
-  { sucursal: 'Puerto Montt', base: 9100000 },
-  { sucursal: 'Osorno', base: 7600000 },
-  { sucursal: 'Iquique', base: 7300000 },
-  { sucursal: 'Arica', base: 6900000 },
-  { sucursal: 'Copiapó', base: 7100000 },
-  { sucursal: 'Curicó', base: 6800000 },
-  { sucursal: 'Chillán', base: 7900000 },
-  { sucursal: 'Los Ángeles', base: 8100000 },
-  { sucursal: 'Punta Arenas', base: 7400000 },
-  { sucursal: 'Coyhaique', base: 5900000 },
-  { sucursal: 'Calama', base: 8300000 },
-  { sucursal: 'San Antonio', base: 6600000 },
-  { sucursal: 'Quillota', base: 6200000 },
-  { sucursal: 'San Felipe', base: 6050000 },
-  { sucursal: 'Melipilla', base: 6400000 },
-  { sucursal: 'Maipú', base: 9500000 },
-  { sucursal: 'Puente Alto', base: 9700000 },
-  { sucursal: 'Las Condes', base: 11800000 },
-  { sucursal: 'Ñuñoa', base: 10200000 },
-  { sucursal: 'Providencia', base: 11000000 },
-  { sucursal: 'Viña del Mar', base: 11500000 },
-  { sucursal: 'Quilpué', base: 6300000 },
-  { sucursal: 'Linares', base: 6000000 },
-  { sucursal: 'Ovalle', base: 5750000 },
-]
-
-function generarVentasDemo(): Venta[] {
-  const factoresMensualesBase = [0.74, 0.82, 0.79, 0.9, 0.87, 1]
-  const meses = [
-    '2025-11-15T12:00:00',
-    '2025-12-15T12:00:00',
-    '2026-01-15T12:00:00',
-    '2026-02-15T12:00:00',
-    '2026-03-15T12:00:00',
-    '2026-04-15T12:00:00',
-  ]
-  let id = 1
-
-  return meses.flatMap((fechaVenta, indiceMes) =>
-    SUCURSALES_DEMO.map(({ sucursal, base }, indiceSucursal) => {
-      const desplazamientoSucursal = ((indiceSucursal % 7) - 3) * 0.03
-      const variacionOndulada =
-        Math.sin((indiceSucursal + 2) * (indiceMes + 1) * 0.65) * 0.05
-      const ajusteCiclico = ((indiceSucursal + indiceMes) % 4 === 0 ? 0.05 : -0.02)
-      const factor = Math.max(
-        0.58,
-        factoresMensualesBase[indiceMes] +
-          desplazamientoSucursal +
-          variacionOndulada +
-          ajusteCiclico,
-      )
-
-      return {
-        id: id++,
-        fechaVenta,
-        montoTotal: Math.round(base * factor + indiceSucursal * 28000),
-        sistemaOrigen: indiceSucursal % 2 === 0 ? 'POS' : 'Ecommerce',
-        sucursal,
-      }
-    }),
-  )
-}
-
-const VENTAS_DEMO: Venta[] = generarVentasDemo()
-
-const TOTAL_DEMO = VENTAS_DEMO.reduce((acum, item) => acum + item.montoTotal, 0)
-
-const KPIS_DEMO: Kpi[] = [
-  {
-    id: 1,
-    nombre: 'Ventas Totales',
-    formula: 'SUM(montoTotal)',
-    valorCalculado: TOTAL_DEMO,
-    fechaActualizacion: '2026-04-23T12:00:00',
-  },
-  {
-    id: 2,
-    nombre: 'Ticket Promedio',
-    formula: 'SUM(montoTotal)/COUNT(*)',
-    valorCalculado: TOTAL_DEMO / VENTAS_DEMO.length,
-    fechaActualizacion: '2026-04-23T12:00:00',
-  },
-]
-
-const DASHBOARD_DEMO: DashboardResponse = {
-  resumen: {
-    totalVentas: TOTAL_DEMO,
-    cantidadVentas: VENTAS_DEMO.length,
-    cantidadSucursales: SUCURSALES_DEMO.length,
-  },
-  ventas: VENTAS_DEMO,
-  ventasPorSucursal: [],
-  kpis: KPIS_DEMO,
-  alertas: ['Modo demo activo.'],
-}
-
-function hashTexto(texto: string) {
-  return Array.from(texto).reduce((acc, char) => acc + char.charCodeAt(0), 0)
-}
+import { DASHBOARD_DEMO } from '../demoData'
 
 function normalizarTexto(texto: string) {
   return texto
@@ -172,15 +49,7 @@ function normalizarTexto(texto: string) {
     .trim()
 }
 
-type DashboardPrincipalPageProps = {
-  rol?: string
-  sucursalAsignada?: string | null
-}
-
-function DashboardPrincipalPage({
-  rol,
-  sucursalAsignada,
-}: DashboardPrincipalPageProps) {
+function DashboardPrincipalPage() {
   const [ventas, setVentas] = useState<Venta[]>(DASHBOARD_DEMO.ventas)
   const [kpis, setKpis] = useState<Kpi[]>(DASHBOARD_DEMO.kpis)
   const [alertas, setAlertas] = useState<string[]>(DASHBOARD_DEMO.alertas)
@@ -190,9 +59,6 @@ function DashboardPrincipalPage({
   const [sucursalActiva, setSucursalActiva] = useState<string | null>(null)
   const [periodoAnalisis, setPeriodoAnalisis] = useState('GENERAL')
 
-  const esEmpleadoTienda = (rol ?? '').toUpperCase() === 'EMPLEADO_TIENDA'
-  const sucursalBloqueada = esEmpleadoTienda && Boolean(sucursalAsignada)
-
   useEffect(() => {
     async function cargarDatos() {
       setCargando(true)
@@ -200,8 +66,11 @@ function DashboardPrincipalPage({
 
       try {
         const respuesta = await fetchDashboard()
-        setVentas(respuesta.ventas)
-        setKpis(respuesta.kpis)
+        const mergedVentas = [...DASHBOARD_DEMO.ventas, ...(respuesta.ventas || [])]
+        const mergedKpis = [...DASHBOARD_DEMO.kpis, ...(respuesta.kpis || [])]
+
+        setVentas(mergedVentas)
+        setKpis(mergedKpis)
         setAlertas(respuesta.alertas)
       } catch {
         setVentas(DASHBOARD_DEMO.ventas)
@@ -366,50 +235,8 @@ function DashboardPrincipalPage({
   }
 
   useEffect(() => {
-    if (sucursalBloqueada && sucursalAsignada) {
-      setSucursalActiva(sucursalAsignada)
-    }
-  }, [sucursalBloqueada, sucursalAsignada])
-
-  useEffect(() => {
     setPeriodoAnalisis('GENERAL')
   }, [sucursalActiva])
-
-  const detalleProductosSucursal = useMemo<RegistroProductoSucursal[]>(() => {
-    if (!sucursalActiva) return []
-
-    const hashSucursal = hashTexto(sucursalActiva)
-    const periodos = serieSucursalActiva.map((item) => item.periodo)
-
-    return periodos.flatMap((periodo, idxPeriodo) =>
-      PRODUCTOS_STOCK.map((item, idxProducto) => {
-        const base = hashSucursal + (idxPeriodo + 1) * 41 + (idxProducto + 3) * 17
-        const vendidos = 22 + (base % 44)
-        const stockRestante = 35 + (base % 120)
-
-        return {
-          periodo,
-          categoria: item.categoria as 'Electrónica' | 'Hogar',
-          producto: item.nombre,
-          stockRestante,
-          vendidos,
-        }
-      }),
-    )
-  }, [serieSucursalActiva, sucursalActiva])
-
-  const periodosAnalisisDisponibles = useMemo(
-    () => serieSucursalActiva.map((item) => item.periodo),
-    [serieSucursalActiva],
-  )
-
-  const detalleFiltrado = useMemo(
-    () =>
-      periodoAnalisis === 'GENERAL'
-        ? detalleProductosSucursal
-        : detalleProductosSucursal.filter((item) => item.periodo === periodoAnalisis),
-    [detalleProductosSucursal, periodoAnalisis],
-  )
 
   const ventasAnalisis = useMemo(() => {
     if (!sucursalActiva) return 0
@@ -422,42 +249,18 @@ function DashboardPrincipalPage({
     return datoMes?.total ?? 0
   }, [periodoAnalisis, resumenSucursalActiva, serieSucursalActiva, sucursalActiva])
 
-  const stockVendidoAnalisis = useMemo(
-    () => detalleFiltrado.reduce((acum, item) => acum + item.vendidos, 0),
-    [detalleFiltrado],
+  const periodosAnalisisDisponibles = useMemo(
+    () => (sucursalActiva ? serieSucursalActiva : graficoConsolidado).map((item) => item.periodo),
+    [sucursalActiva, serieSucursalActiva, graficoConsolidado],
   )
 
-  const productoMasVendido = useMemo(() => {
-    if (!detalleFiltrado.length) return null
-
-    return detalleFiltrado.reduce((maximo, actual) =>
-      actual.vendidos > maximo.vendidos ? actual : maximo,
+  const detalleFiltrado = useMemo(() => {
+    return obtenerDetalleStock(
+      sucursalActiva,
+      periodoAnalisis,
+      periodosAnalisisDisponibles,
     )
-  }, [detalleFiltrado])
-
-  const stockPorCategoria = useMemo(() => {
-    const periodoReferencia =
-      periodoAnalisis === 'GENERAL'
-        ? periodosAnalisisDisponibles[periodosAnalisisDisponibles.length - 1]
-        : periodoAnalisis
-
-    if (!periodoReferencia) {
-      return { electronica: 0, hogar: 0 }
-    }
-
-    const detallePeriodo = detalleProductosSucursal.filter(
-      (item) => item.periodo === periodoReferencia,
-    )
-
-    return {
-      electronica: detallePeriodo
-        .filter((item) => item.categoria === 'Electrónica')
-        .reduce((acum, item) => acum + item.stockRestante, 0),
-      hogar: detallePeriodo
-        .filter((item) => item.categoria === 'Hogar')
-        .reduce((acum, item) => acum + item.stockRestante, 0),
-    }
-  }, [detalleProductosSucursal, periodoAnalisis, periodosAnalisisDisponibles])
+  }, [sucursalActiva, periodoAnalisis, periodosAnalisisDisponibles])
 
   const detalleElectronica = useMemo(
     () => detalleFiltrado.filter((item) => item.categoria === 'Electrónica'),
@@ -480,7 +283,7 @@ function DashboardPrincipalPage({
       {mensajeError && <p className="mensaje-error">{mensajeError}</p>}
       {!mensajeError && alertas.length > 0 && <p className="mensaje-demo">{alertas[0]}</p>}
 
-      {!sucursalBloqueada && <section className="tarjeta-panel">
+      <section className="tarjeta-panel">
         <div className="encabezado-mini-sucursales">
           <h3>Ventas por sucursal</h3>
           <div className="controles-mini-sucursales">
@@ -542,29 +345,21 @@ function DashboardPrincipalPage({
             </article>
           )})}
         </div>
-      </section>}
+      </section>
 
       {sucursalActiva ? (
         <>
           <section className="tarjeta-panel">
             <div className="encabezado-mini-sucursales">
               <h3>Rendimiento de {sucursalActiva} (últimos 6 meses)</h3>
-              {!sucursalBloqueada && (
-                <button
-                  type="button"
-                  className="boton-volver-general"
-                  onClick={() => setSucursalActiva(null)}
-                >
-                  Volver al general
-                </button>
-              )}
+              <button
+                type="button"
+                className="boton-volver-general"
+                onClick={() => setSucursalActiva(null)}
+              >
+                Volver al general
+              </button>
             </div>
-
-            {esEmpleadoTienda && (
-              <p className="mensaje-demo">
-                Puedes revisar el rendimiento general de {sucursalActiva} o seleccionar un mes puntual.
-              </p>
-            )}
 
             <div className="contenedor-grafico">
               <ResponsiveContainer width="100%" height={320}>
@@ -608,25 +403,6 @@ function DashboardPrincipalPage({
           <section className="tarjeta-panel">
             <h3>Resumen rápido ({sucursalActiva})</h3>
 
-            {esEmpleadoTienda && (
-              <div className="formulario-simple" style={{ marginBottom: 12 }}>
-                <label>
-                  Periodo de análisis
-                  <select
-                    value={periodoAnalisis}
-                    onChange={(evento) => setPeriodoAnalisis(evento.target.value)}
-                  >
-                    <option value="GENERAL">General (6 meses)</option>
-                    {periodosAnalisisDisponibles.map((periodo) => (
-                      <option key={periodo} value={periodo}>
-                        {periodo}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-            )}
-
             <div className="rejilla-kpi">
               <article className="tarjeta-kpi">
                 <h3>{periodoAnalisis === 'GENERAL' ? 'Ventas 6 meses' : 'Ventas del mes'}</h3>
@@ -634,58 +410,26 @@ function DashboardPrincipalPage({
               </article>
 
               <article className="tarjeta-kpi">
-                <h3>{esEmpleadoTienda ? 'Stock vendido' : 'Promedio mensual'}</h3>
+                <h3>Promedio mensual</h3>
                 <p>
-                  {esEmpleadoTienda
-                    ? stockVendidoAnalisis
-                    : FORMATO_MONEDA.format(resumenSucursalActiva?.promedioMensual ?? 0)}
+                  {FORMATO_MONEDA.format(resumenSucursalActiva?.promedioMensual ?? 0)}
                 </p>
               </article>
 
               <article className="tarjeta-kpi">
-                <h3>{esEmpleadoTienda ? 'Producto más vendido' : 'Mejor mes'}</h3>
+                <h3>Mejor mes</h3>
                 <p>
-                  {esEmpleadoTienda
-                    ? productoMasVendido?.producto ?? '-'
-                    : resumenSucursalActiva?.mejorMes?.periodo ?? '-'}
+                  {resumenSucursalActiva?.mejorMes?.periodo ?? '-'}
                 </p>
               </article>
 
               <article className="tarjeta-kpi">
-                <h3>{esEmpleadoTienda ? 'Stock actual (ref.)' : 'Registros de venta'}</h3>
+                <h3>Registros de venta</h3>
                 <p>
-                  {esEmpleadoTienda
-                    ? stockPorCategoria.electronica + stockPorCategoria.hogar
-                    : resumenSucursalActiva?.registros ?? 0}
+                  {resumenSucursalActiva?.registros ?? 0}
                 </p>
               </article>
             </div>
-
-            {esEmpleadoTienda && (
-              <div className="panel-graficos" style={{ marginTop: 12 }}>
-                <article className="tarjeta-panel">
-                  <h3>Stock de productos (Electrónica)</h3>
-                  <div className="lista-sucursales-resumen">
-                    {detalleElectronica.map((item) => (
-                      <p key={`${item.periodo}-${item.producto}`}>
-                        <strong>{item.producto}:</strong> {item.stockRestante} en stock
-                      </p>
-                    ))}
-                  </div>
-                </article>
-
-                <article className="tarjeta-panel">
-                  <h3>Stock de productos (Hogar)</h3>
-                  <div className="lista-sucursales-resumen">
-                    {detalleHogar.map((item) => (
-                      <p key={`${item.periodo}-${item.producto}`}>
-                        <strong>{item.producto}:</strong> {item.stockRestante} en stock
-                      </p>
-                    ))}
-                  </div>
-                </article>
-              </div>
-            )}
           </section>
         </>
       ) : (
@@ -791,6 +535,53 @@ function DashboardPrincipalPage({
           </article>
         </div>
       </section>}
+
+      <section className="tarjeta-panel" style={{ marginTop: 24 }}>
+        <h3>
+          Stock de productos {sucursalActiva ? `(${sucursalActiva})` : '(Todas las sucursales)'}
+        </h3>
+        
+        <div className="formulario-simple" style={{ marginBottom: 12 }}>
+          <label>
+            Periodo de análisis
+            <select
+              value={periodoAnalisis}
+              onChange={(evento) => setPeriodoAnalisis(evento.target.value)}
+            >
+              <option value="GENERAL">General (6 meses)</option>
+              {periodosAnalisisDisponibles.map((periodo) => (
+                <option key={periodo} value={periodo}>
+                  {periodo}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="panel-graficos" style={{ marginTop: 12 }}>
+          <article className="tarjeta-panel">
+            <h3>Stock de productos (Electrónica)</h3>
+            <div className="lista-sucursales-resumen">
+              {detalleElectronica.map((item) => (
+                <p key={item.producto}>
+                  <strong>{item.stockInicial} {item.producto.toLowerCase()}</strong> ({item.vendidos} vendidos) total = {item.stockRestante} {item.producto.toLowerCase()}
+                </p>
+              ))}
+            </div>
+          </article>
+
+          <article className="tarjeta-panel">
+            <h3>Stock de productos (Hogar)</h3>
+            <div className="lista-sucursales-resumen">
+              {detalleHogar.map((item) => (
+                <p key={item.producto}>
+                  <strong>{item.stockInicial} {item.producto.toLowerCase()}</strong> ({item.vendidos} vendidos) total = {item.stockRestante} {item.producto.toLowerCase()}
+                </p>
+              ))}
+            </div>
+          </article>
+        </div>
+      </section>
     </section>
   )
 }

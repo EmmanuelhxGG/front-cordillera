@@ -1,8 +1,9 @@
 import './App.css'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AdminLayout } from './layouts'
 import ConfiguracionAuditoriaPage from './pages/ConfiguracionAuditoriaPage'
 import DashboardPrincipalPage from './pages/DashboardPrincipalPage'
+import EmpleadoDashboardPage from './pages/EmpleadoDashboardPage'
 import GestionOrganizacionalPage from './pages/GestionOrganizacionalPage'
 import LoginPage from './pages/LoginPage'
 import ReportesPage from './pages/ReportesPage'
@@ -27,7 +28,26 @@ function App() {
   const [rol, setRol] = useState(sesionInicial.rol)
   const [usuario, setUsuario] = useState(sesionInicial.usuario)
   const [sucursal, setSucursal] = useState<string | null>(sesionInicial.sucursal)
-  const [paginaActual, setPaginaActual] = useState<PaginaSistema>('dashboard')
+  const hashInicial = (window.location.hash.replace('#', '') as PaginaSistema) || 'dashboard'
+  const [paginaActual, setPaginaActual] = useState<PaginaSistema>(hashInicial)
+
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      if (event.state?.pagina) {
+        setPaginaActual(event.state.pagina)
+      } else {
+        const hash = window.location.hash.replace('#', '') as PaginaSistema
+        setPaginaActual(hash || 'dashboard')
+      }
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
+
+  function navegarA(nuevaPagina: PaginaSistema) {
+    setPaginaActual(nuevaPagina)
+    window.history.pushState({ pagina: nuevaPagina }, '', `#${nuevaPagina}`)
+  }
 
   function manejarLoginExitoso(
     nuevoToken: string,
@@ -39,7 +59,7 @@ function App() {
     setRol(nuevoRol)
     setUsuario(nuevoUsuario)
     setSucursal(nuevaSucursal)
-    setPaginaActual('dashboard')
+    navegarA('dashboard')
 
     sessionStorage.setItem('token', nuevoToken)
     sessionStorage.setItem('rol', nuevoRol)
@@ -62,7 +82,7 @@ function App() {
     setRol('')
     setUsuario('')
     setSucursal(null)
-    setPaginaActual('dashboard')
+    navegarA('dashboard')
   }
 
   const esAdmin = rol.toUpperCase() === 'ADMIN'
@@ -77,7 +97,10 @@ function App() {
   }
 
   const opcionesMenu: Array<{ clave: PaginaSistema; texto: string }> = esEmpleadoTienda
-    ? [{ clave: 'dashboard', texto: 'Dashboard principal' }]
+    ? [
+        { clave: 'dashboard', texto: 'Dashboard principal' },
+        { clave: 'reportes', texto: 'Módulo de reportes' },
+      ]
     : [
         { clave: 'dashboard', texto: 'Dashboard principal' },
         { clave: 'reportes', texto: 'Módulo de reportes' },
@@ -95,12 +118,12 @@ function App() {
         },
       ]
 
-  let contenidoPagina = (
-    <DashboardPrincipalPage rol={rol} sucursalAsignada={sucursal} />
-  )
+  let contenidoPagina = esEmpleadoTienda && sucursal
+    ? <EmpleadoDashboardPage sucursalAsignada={sucursal} />
+    : <DashboardPrincipalPage />
 
-  if (paginaActual === 'reportes' && !esEmpleadoTienda) {
-    contenidoPagina = <ReportesPage />
+  if (paginaActual === 'reportes') {
+    contenidoPagina = <ReportesPage rol={rol} sucursalAsignada={sucursal} />
   }
 
   if (paginaActual === 'gestion-organizacional' && esAdmin && !esEmpleadoTienda) {
@@ -132,7 +155,7 @@ function App() {
                 key={opcion.clave}
                 type="button"
                 className={paginaActual === opcion.clave ? 'activo' : ''}
-                onClick={() => setPaginaActual(opcion.clave)}
+                onClick={() => navegarA(opcion.clave)}
               >
                 {opcion.texto}
               </button>

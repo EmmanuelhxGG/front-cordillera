@@ -45,6 +45,20 @@ function LoginPage({ onLoginExitoso }: LoginPageProps) {
     setCargando(true)
 
     try {
+      const dbStr = localStorage.getItem('cordillera_mock_users')
+      const db = dbStr ? JSON.parse(dbStr) : []
+      const usuarioLocal = db.find((u: any) => u.username === usuario.trim() && u.password === contrasena)
+
+      if (usuarioLocal) {
+        onLoginExitoso(
+          'local-mock-token',
+          usuarioLocal.rol,
+          usuarioLocal.username,
+          usuarioLocal.sucursalAsignada,
+        )
+        return
+      }
+
       const respuesta: LoginResponse = await iniciarSesion({
         username: usuario.trim(),
         password: contrasena,

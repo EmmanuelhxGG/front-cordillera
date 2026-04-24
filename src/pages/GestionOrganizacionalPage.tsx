@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { actualizarFormulaKpi, fetchKpis, fetchVentas, registrarVenta } from '../api'
+import { SUCURSALES_DEMO } from '../demoData'
 import type { Kpi, Venta } from '../types'
 
 type Sucursal = {
@@ -23,6 +24,16 @@ function GestionOrganizacionalPage() {
 
   const [kpiSeleccionadoId, setKpiSeleccionadoId] = useState<number | null>(null)
   const [nuevaFormula, setNuevaFormula] = useState('')
+
+  // Estado para creación de empleado local
+  const [nuevoEmpleado, setNuevoEmpleado] = useState({
+    nombreCompleto: '',
+    edad: '',
+    username: '',
+    password: '',
+    sucursalAsignada: '',
+  })
+  const [mensajeEmpleado, setMensajeEmpleado] = useState('')
 
   useEffect(() => {
     async function cargarSucursales() {
@@ -129,6 +140,56 @@ function GestionOrganizacionalPage() {
       setMensajeKpi('Fórmula de KPI actualizada correctamente.')
     } catch {
       setMensajeKpi('No fue posible actualizar la fórmula en ms-kpis.')
+    }
+  }
+
+  function crearEmpleado() {
+    setMensajeEmpleado('')
+    const { nombreCompleto, edad, username, password, sucursalAsignada } = nuevoEmpleado
+
+    if (!nombreCompleto.trim() || !edad || !username.trim() || !password || !sucursalAsignada) {
+      setMensajeEmpleado('Todos los campos son obligatorios.')
+      return
+    }
+
+    const edadNum = Number(edad)
+    if (Number.isNaN(edadNum) || edadNum < 18) {
+      setMensajeEmpleado('La edad debe ser un número válido mayor o igual a 18.')
+      return
+    }
+
+    try {
+      const dbStr = localStorage.getItem('cordillera_mock_users')
+      const db = dbStr ? JSON.parse(dbStr) : []
+      
+      const existe = db.find((u: any) => u.username === username.trim())
+      if (existe) {
+        setMensajeEmpleado('Ya existe un usuario con ese nombre de usuario.')
+        return
+      }
+
+      db.push({
+        nombreCompleto: nombreCompleto.trim(),
+        edad: edadNum,
+        username: username.trim(),
+        password,
+        rol: 'EMPLEADO_TIENDA',
+        sucursalAsignada: sucursalAsignada.trim(),
+      })
+
+      localStorage.setItem('cordillera_mock_users', JSON.stringify(db))
+      
+      setNuevoEmpleado({
+        nombreCompleto: '',
+        edad: '',
+        username: '',
+        password: '',
+        sucursalAsignada: '',
+      })
+      
+      setMensajeEmpleado(`Empleado ${username} creado exitosamente.`)
+    } catch {
+      setMensajeEmpleado('Hubo un error al guardar el empleado localmente.')
     }
   }
 
@@ -250,6 +311,82 @@ function GestionOrganizacionalPage() {
         </div>
 
         {mensajeKpi && <p>{mensajeKpi}</p>}
+      </section>
+
+      <section className="tarjeta-panel">
+        <h3>Crear Empleado (Acceso Local)</h3>
+        <p className="mensaje-demo">
+          Crea credenciales para que un empleado inicie sesión y visualice su sucursal.
+        </p>
+        <div className="formulario-simple">
+          <label>
+            Nombre completo
+            <input
+              type="text"
+              value={nuevoEmpleado.nombreCompleto}
+              onChange={(e) =>
+                setNuevoEmpleado((actual) => ({ ...actual, nombreCompleto: e.target.value }))
+              }
+            />
+          </label>
+
+          <label>
+            Edad
+            <input
+              type="number"
+              min={18}
+              value={nuevoEmpleado.edad}
+              onChange={(e) =>
+                setNuevoEmpleado((actual) => ({ ...actual, edad: e.target.value }))
+              }
+            />
+          </label>
+
+          <label>
+            Usuario
+            <input
+              type="text"
+              placeholder="Ej: empleado.valpo"
+              value={nuevoEmpleado.username}
+              onChange={(e) =>
+                setNuevoEmpleado((actual) => ({ ...actual, username: e.target.value }))
+              }
+            />
+          </label>
+
+          <label>
+            Contraseña
+            <input
+              type="password"
+              value={nuevoEmpleado.password}
+              onChange={(e) =>
+                setNuevoEmpleado((actual) => ({ ...actual, password: e.target.value }))
+              }
+            />
+          </label>
+
+          <label>
+            Sucursal asignada
+            <select
+              value={nuevoEmpleado.sucursalAsignada}
+              onChange={(e) =>
+                setNuevoEmpleado((actual) => ({ ...actual, sucursalAsignada: e.target.value }))
+              }
+            >
+              <option value="">Seleccione una sucursal</option>
+              {SUCURSALES_DEMO.map((s) => (
+                <option key={s.sucursal} value={s.sucursal}>
+                  {s.sucursal}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <button type="button" onClick={crearEmpleado}>
+            Registrar Empleado
+          </button>
+        </div>
+        {mensajeEmpleado && <p className="mensaje-demo" style={{ marginTop: 12 }}>{mensajeEmpleado}</p>}
       </section>
     </section>
   )

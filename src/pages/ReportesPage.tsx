@@ -61,6 +61,14 @@ function fechaTexto(fecha: Date) {
   return fecha.toISOString().slice(0, 10)
 }
 
+function normalizarTexto(texto: string) {
+  return texto
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+}
+
 function generarDatosAnaliticosDemo(): RegistroAnalitico[] {
   const hoy = new Date()
   const dias = 45
@@ -121,7 +129,12 @@ function descargarComoTexto(nombreArchivo: string, contenido: string) {
   URL.revokeObjectURL(enlace.href)
 }
 
-function ReportesPage() {
+type ReportesPageProps = {
+  rol?: string
+  sucursalAsignada?: string | null
+}
+
+function ReportesPage({ rol, sucursalAsignada }: ReportesPageProps) {
   const [titulo, setTitulo] = useState('')
   const [configuracionVisual, setConfiguracionVisual] = useState('')
   const [plantillas, setPlantillas] = useState<PlantillaReporte[]>([])
@@ -150,6 +163,9 @@ function ReportesPage() {
     cargarPlantillas()
   }, [])
 
+  const esEmpleadoTienda = (rol ?? '').toUpperCase() === 'EMPLEADO_TIENDA'
+  const sucursalBloqueada = esEmpleadoTienda && Boolean(sucursalAsignada)
+
   const sucursalesOpciones = useMemo(
     () => ['Todas', ...SUCURSALES_ANALITICA],
     [],
@@ -161,14 +177,20 @@ function ReportesPage() {
   )
 
   const registrosFiltrados = useMemo(() => {
+    const asignadaNorm = sucursalAsignada ? normalizarTexto(sucursalAsignada) : null
+    const filtroNorm = normalizarTexto(sucursalFiltro)
+
     return DATOS_ANALITICA_DEMO.filter((item) => {
-      if (sucursalFiltro !== 'Todas' && item.sucursal !== sucursalFiltro) return false
+      const sucursalItemNorm = normalizarTexto(item.sucursal)
+
+      if (sucursalBloqueada && asignadaNorm && sucursalItemNorm !== asignadaNorm) return false
+      if (!sucursalBloqueada && sucursalFiltro !== 'Todas' && sucursalItemNorm !== filtroNorm) return false
       if (categoriaFiltro !== 'Todas' && item.categoria !== categoriaFiltro) return false
       if (fechaDesde && item.fecha < fechaDesde) return false
       if (fechaHasta && item.fecha > fechaHasta) return false
       return true
     })
-  }, [categoriaFiltro, fechaDesde, fechaHasta, sucursalFiltro])
+  }, [categoriaFiltro, fechaDesde, fechaHasta, sucursalFiltro, sucursalBloqueada, sucursalAsignada])
 
   const ventaTotalConsolidada = useMemo(
     () => registrosFiltrados.reduce((acum, item) => acum + item.ventas, 0),
@@ -260,12 +282,17 @@ function ReportesPage() {
     return { filas, maximo }
   }, [registrosFiltrados])
 
-  const totalPaginas = Math.max(1, Math.ceil(plantillas.length / TAMANO_PAGINA))
+  const plantillasVisibles = useMemo(() => {
+    if (!sucursalBloqueada || !sucursalAsignada) return plantillas
+    return plantillas.filter((p) => p.titulo?.includes(`[${sucursalAsignada}]`))
+  }, [plantillas, sucursalBloqueada, sucursalAsignada])
+
+  const totalPaginas = Math.max(1, Math.ceil(plantillasVisibles.length / TAMANO_PAGINA))
 
   const plantillasPaginadas = useMemo(() => {
     const inicio = (paginaActual - 1) * TAMANO_PAGINA
-    return plantillas.slice(inicio, inicio + TAMANO_PAGINA)
-  }, [paginaActual, plantillas])
+    return plantillasVisibles.slice(inicio, inicio + TAMANO_PAGINA)
+  }, [paginaActual, plantillasVisibles])
 
   async function crearPlantilla() {
     setMensajePlantilla('')
@@ -275,16 +302,20 @@ function ReportesPage() {
       return
     }
 
+    const tituloFinal = sucursalBloqueada && sucursalAsignada
+      ? `[${sucursalAsignada}] ${titulo.trim()}`
+      : titulo.trim()
+
     const plantillaLocal: PlantillaReporte = {
       id: Date.now(),
-      titulo: titulo.trim(),
+      titulo: tituloFinal,
       configuracionVisual: configuracionVisual.trim(),
       estado: 'Activo',
     }
 
     try {
       const creada = await createPlantillaReporte({
-        titulo: titulo.trim(),
+        titulo: tituloFinal,
         configuracionVisual: configuracionVisual.trim(),
         estado: 'Activo',
       })
@@ -362,19 +393,21 @@ function ReportesPage() {
       <section className="tarjeta-panel">
         <h3>Barra de Filtros Inteligente</h3>
         <div className="reportes-filtros-grid">
-          <label>
-            Selector de Sucursal
-            <select
-              value={sucursalFiltro}
-              onChange={(evento) => setSucursalFiltro(evento.target.value)}
-            >
-              {sucursalesOpciones.map((sucursal) => (
-                <option key={sucursal} value={sucursal}>
-                  {sucursal}
-                </option>
-              ))}
-            </select>
-          </label>
+          {!sucursalBloqueada && (
+            <label>
+              Selector de Sucursal
+              <select
+                value={sucursalFiltro}
+                onChange={(evento) => setSucursalFiltro(evento.target.value)}
+              >
+                {sucursalesOpciones.map((sucursal) => (
+                  <option key={sucursal} value={sucursal}>
+                    {sucursal}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
 
           <label>
             Rango - Desde
@@ -448,41 +481,43 @@ function ReportesPage() {
         </article>
       </section>
 
-      <section className="tarjeta-panel">
-        <h3>Mapa de Calor: concentración de ventas en Chile</h3>
-        <div className="reportes-heatmap-cabecera">
-          <span>Sucursal</span>
-          {CATEGORIAS_ANALITICA.map((categoria) => (
-            <span key={categoria}>{categoria}</span>
-          ))}
-        </div>
+      {!sucursalBloqueada && (
+        <section className="tarjeta-panel">
+          <h3>Mapa de Calor: concentración de ventas en Chile</h3>
+          <div className="reportes-heatmap-cabecera">
+            <span>Sucursal</span>
+            {CATEGORIAS_ANALITICA.map((categoria) => (
+              <span key={categoria}>{categoria}</span>
+            ))}
+          </div>
 
-        <div className="reportes-heatmap-grid">
-          {heatmapChile.filas.map((fila) => (
-            <div className="reportes-heatmap-row" key={fila.sucursal}>
-              <span className="reportes-heatmap-sucursal">{fila.sucursal}</span>
-              {fila.valores.map((item) => {
-                const intensidad = heatmapChile.maximo
-                  ? item.valor / heatmapChile.maximo
-                  : 0
+          <div className="reportes-heatmap-grid">
+            {heatmapChile.filas.map((fila) => (
+              <div className="reportes-heatmap-row" key={fila.sucursal}>
+                <span className="reportes-heatmap-sucursal">{fila.sucursal}</span>
+                {fila.valores.map((item) => {
+                  const intensidad = heatmapChile.maximo
+                    ? item.valor / heatmapChile.maximo
+                    : 0
 
-                return (
-                  <span
-                    key={`${fila.sucursal}-${item.categoria}`}
-                    className="reportes-heatmap-celda"
-                    style={{
-                      backgroundColor: `rgba(15, 118, 110, ${0.1 + intensidad * 0.85})`,
-                    }}
-                    title={`${fila.sucursal} - ${item.categoria}: ${FORMATO_MONEDA.format(item.valor)}`}
-                  >
-                    {FORMATO_COMPACTO.format(item.valor)}
-                  </span>
-                )
-              })}
-            </div>
-          ))}
-        </div>
-      </section>
+                  return (
+                    <span
+                      key={`${fila.sucursal}-${item.categoria}`}
+                      className="reportes-heatmap-celda"
+                      style={{
+                        backgroundColor: `rgba(15, 118, 110, ${0.1 + intensidad * 0.85})`,
+                      }}
+                      title={`${fila.sucursal} - ${item.categoria}: ${FORMATO_MONEDA.format(item.valor)}`}
+                    >
+                      {FORMATO_COMPACTO.format(item.valor)}
+                    </span>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="tarjeta-panel">
         <h3>Nueva plantilla</h3>

@@ -3,7 +3,11 @@ import { fetchVentas } from './ventasApi'
 import type { DashboardResponse } from '../types'
 
 export async function fetchDashboard(): Promise<DashboardResponse> {
-  const [ventas, kpis] = await Promise.all([fetchVentas(), fetchKpis()])
+  const [rawVentas, kpis] = await Promise.all([fetchVentas(), fetchKpis()])
+
+  const ventas = rawVentas.filter(
+    (venta) => !venta.sucursal.toLowerCase().includes('prueba')
+  )
 
   const resumen = {
     totalVentas: ventas.reduce((acum, venta) => acum + venta.montoTotal, 0),
